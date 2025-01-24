@@ -6,113 +6,342 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.button import Button
+from kivy.core.window import Window
+from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.metrics import dp
+from kivy.utils import get_color_from_hex
 from ui.customWordInput import CustomWordInput
 from ui.eventHandlers import EventHandlers
+
+# Konfiguracja stylów
+COLORS = {
+    "background": get_color_from_hex("#1B1B1E"),
+    "primary": get_color_from_hex("#25F7BF"),
+    "secondary": get_color_from_hex("#1B1B1E"),
+    "text": get_color_from_hex("#D8DBE2"),
+    "surface": get_color_from_hex("#3A3A40"),
+    "error": get_color_from_hex("#B00020"),
+    "hint": get_color_from_hex("#148C6C"),
+}
+
+FONTS = {
+    "regular": "assets/fonts/Roboto-Regular.ttf",
+    "medium": "assets/fonts/Roboto-Medium.ttf",
+}
+
+
+class StyledButton(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ""
+        self.background_color = (0, 0, 0, 0)
+        self.color = COLORS["secondary"]
+        self.font_name = FONTS["medium"]
+        self.font_size = dp(18)
+        self.bold = False
+        with self.canvas.before:
+            Color(*COLORS["primary"])
+            self.rect = RoundedRectangle(size=self.size, pos=self.pos, radius=[dp(8)])
+        self.bind(pos=self.update_rect, size=self.update_rect)
+
+    def update_rect(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+
+
+class StyledTextInput(TextInput):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ""
+        self.background_disabled_normal = ""
+        self.background_color = COLORS["surface"]  # Nadpisuje styl disabled
+        self.foreground_color = COLORS["primary"]
+        self.hint_text_color = COLORS["primary"]
+        self.font_name = FONTS["regular"]
+        self.font_size = dp(16)
+        self.padding = [dp(8), dp(8)]
+        self.cursor_color = COLORS["secondary"]
+        self.cursor_width = dp(2)
+
+
+from kivy.uix.dropdown import DropDown
+
+
+class StyledSpinner(Spinner):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal = ""
+        self.background_color = (0, 0, 0, 0)
+        self.color = COLORS["secondary"]
+        self.font_name = FONTS["medium"]
+        self.font_size = dp(18)
+
+        with self.canvas.before:
+            Color(*COLORS["primary"])
+            self.rect = RoundedRectangle(size=self.size, pos=self.pos, radius=[dp(8)])
+
+        self.bind(pos=self.update_rect, size=self.update_rect)
+        self.option_cls = self.create_option()
+        self.dropdown_cls = self.RoundedDropdown
+
+    def update_rect(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+
+    class RoundedDropdown(DropDown):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.background_color = COLORS["surface"]
+            self.border = [0, 0, 0, 0]
+            self.max_height = dp(200)
+
+            with self.canvas.before:
+                Color(*COLORS["surface"])
+                self.bg_rect = RoundedRectangle(radius=[dp(8)])
+
+            self.bind(pos=self.update_bg, size=self.update_bg)
+
+        def update_bg(self, instance, value):
+            self.bg_rect.pos = instance.pos
+            self.bg_rect.size = instance.size
+
+    def create_option(self):
+        class RoundedOption(Button):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.background_normal = ""
+                self.background_color = COLORS["surface"]
+                self.color = COLORS["text"]
+                self.font_name = FONTS["regular"]
+                self.size_hint_y = None
+                self.height = dp(40)
+
+                with self.canvas.before:
+                    Color(*COLORS["surface"])
+                    self.rect = RoundedRectangle(
+                        pos=self.pos, size=self.size, radius=[dp(4)]
+                    )
+
+                self.bind(pos=self.update_rect, size=self.update_rect)
+
+            def update_rect(self, instance, value):
+                self.rect.pos = self.pos
+                self.rect.size = self.size
+
+        return RoundedOption
+
 
 class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.WordSolver = None  # Inicjalizacja WordSolver jako None
-        with open('./Data/slowa.txt', 'r', encoding='utf-8') as file:
+        self.WordSolver = None
+        with open("../Data/slowa.txt", "r", encoding="utf-8") as file:
             self.words = file.readlines()
-        self.word_list = TextInput(hint_text='Wyświetlane słowa', multiline=True, readonly=True, size_hint=(0.9, 0.95)  )
-        self.letters_layout = GridLayout(cols=1, size_hint_y=None, spacing=5)
-        self.in_letters_layout = GridLayout(cols=1, size_hint_y=None, spacing=5)
+
+        # Inicjalizacja pól tekstowych
+        self.word_list = StyledTextInput(
+            hint_text="Znalezione słowa będą wyświetlane tutaj",
+            multiline=True,
+            readonly=True,
+            hint_text_color=COLORS["primary"],
+            size_hint=(1, 1),
+            background_disabled_normal="",  # Wyłącz domyślny styl disabled
+        )
+        self.word_list.write_tab = False
+        self.word_list.cursor_blink = False
+        self.word_list.cursor_width = 0
+
+        # Layouty
+        self.letters_layout = GridLayout(cols=1, size_hint_y=None, spacing=dp(5))
+        self.in_letters_layout = GridLayout(cols=1, size_hint_y=None, spacing=dp(5))
         self.selected_number = None
+
+        # Custom input
         self.word1 = CustomWordInput(
             app_instance=self,
             input_callback=None,
             delete_callback=None,
-            hint_text='Wpisz Litery',
+            hint_text="Wpisz litery",
+            cursor_color=COLORS["primary"],
+            hint_text_color=COLORS["hint"],
+            foreground_color=COLORS["text"],
+            font_size=dp(16),
             multiline=False,
             size_hint_y=None,
-            height=30
+            height=dp(50),
+            font_name=FONTS["regular"],
+            background_color=COLORS["surface"],
         )
-        self.word1_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50)
-        #Visibility
-        self.word1_box.opacity = 0
-        self.word1_box.disabled = True
-        self.correct_letters_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50)
-        self.correct_letters_box.opacity = 0
-        self.correct_letters_box.disabled = True
-        self.incorrect_letters_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50)
-        self.incorrect_letters_box.opacity = 0
-        self.incorrect_letters_box.disabled = True
-        self.eventHandlers = EventHandlers(self.WordSolver, self.word_list, self.letters_layout, self.in_letters_layout, self.selected_number, self.words, self.word1, self.word1_box, self.correct_letters_box, self.incorrect_letters_box )
-        self.word1.input_callback=self.eventHandlers.on_word1_input
-        self.word1.delete_callback=self.eventHandlers.on_word1_delete
-        
+
+        # Kontenery
+        self.init_containers()
+        self.eventHandlers = EventHandlers(
+            self.WordSolver,
+            self.word_list,
+            self.letters_layout,
+            self.in_letters_layout,
+            self.selected_number,
+            self.words,
+            self.word1,
+            self.word1_box,
+            self.correct_letters_box,
+            self.incorrect_letters_box,
+            COLORS,
+        )
+        self.word1.input_callback = self.eventHandlers.on_word1_input
+        self.word1.delete_callback = self.eventHandlers.on_word1_delete
+
+    def init_containers(self):
+        # Kontenery z animowaną widocznością
+        self.create_box = lambda: BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(5),
+            padding=[0, dp(10), 0, 0],
+        )
+
+        self.word1_box = self.create_box()
+        self.correct_letters_box = self.create_box()
+        self.incorrect_letters_box = self.create_box()
+
+        for box in [
+            self.word1_box,
+            self.correct_letters_box,
+            self.incorrect_letters_box,
+        ]:
+            box.opacity = 0
+            box.disabled = True
+
+        self.word1_box.height = dp(80)
+        self.correct_letters_box.height = dp(100)
+        self.incorrect_letters_box.height = dp(100)
+
     def build(self):
-        self.title = "Wordle Solver"  # Set the window title
-        
-        root_layout = BoxLayout(orientation='vertical', padding=[10, 10, 10, 0])
+        Window.clearcolor = COLORS["background"]
+        self.title = "Wordle Solver - Premium"
 
-        top_layout = BoxLayout(orientation='vertical', padding=10, spacing=5, size_hint_y=None)
-        top_layout.bind(minimum_height= top_layout.setter('height'))
-        
-        button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=44)
-        
-        self.clear_button = Button(
-            text="Wyczyść",
-            size_hint=(None, None),
-            size=(100, 44),
-            on_press=self.eventHandlers.clear_all_inputs
+        # Główny layout
+        root_layout = BoxLayout(
+            orientation="vertical",
+            padding=[dp(15), dp(15), dp(15), dp(10)],
+            spacing=dp(10),
         )
-        button_layout.add_widget(self.clear_button)
 
-        self.spinner_layout = AnchorLayout(anchor_x='right', anchor_y='top')
-        self.spinner = Spinner(
-            text='Wybierz liczbę',
+        # Górna sekcja
+        top_layout = BoxLayout(
+            orientation="vertical",
+            spacing=dp(20),
+            size_hint_y=None,
+        )
+        top_layout.bind(minimum_height=top_layout.setter("height"))
+
+        # Panel sterowania
+        control_panel = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(50),
+            spacing=dp(10),
+        )
+
+        # Przycisk czyszczenia
+        self.clear_button = StyledButton(
+            text="Wyczyść wszystko", size_hint=(0.4, None), height=dp(50)
+        )
+        self.clear_button.bind(on_press=self.eventHandlers.clear_all_inputs)
+
+        # Spinner długości słowa
+        self.spinner = StyledSpinner(
+            text="Długość słowa",
             values=[str(i) for i in range(2, 12)],
-            size_hint=(None, None),
-            size=(100, 44)
+            size_hint=(0.6, None),
+            height=dp(50),
         )
         self.spinner.bind(text=self.eventHandlers.on_spinner_select)
-        self.spinner_layout.add_widget(self.spinner)
-        button_layout.add_widget(self.spinner_layout)
-        
-        top_layout.add_widget(button_layout)
 
-        #Word1 Label 
-        self.word1_label = Label(text='Litery których nie ma w słowie', size_hint_y=None, height=20, halign='left', valign='middle')
-        self.word1_label.bind(size=self.word1_label.setter('text_size'))
-        self.word1_box.add_widget(self.word1_label)
-        self.word1_box.add_widget(self.word1)
+        control_panel.add_widget(self.clear_button)
+        control_panel.add_widget(self.spinner)
+        top_layout.add_widget(control_panel)
 
-        top_layout.add_widget(self.word1_box)
+        # Sekcje wejściowe
+        sections = [
+            ("Litery wykluczone", self.word1_box, self.word1),
+            ("Litery na pozycjach", self.correct_letters_box, self.letters_layout),
+            (
+                "Litery nie na pozycjach",
+                self.incorrect_letters_box,
+                self.in_letters_layout,
+            ),
+        ]
 
-        self.correct_letters_label = Label(text='Litery na poprawnych pozycjach', size_hint_y=None, height=20, halign='left', valign='middle')
-        self.correct_letters_box.add_widget(self.correct_letters_label)
+        for title, box, widget in sections:
+            # Nagłówek sekcji
+            label = Label(
+                text=title,
+                color=COLORS["text"],
+                font_name=FONTS["medium"],
+                font_size=dp(16),
+                size_hint_y=None,
+                height=dp(25),
+                halign="left",
+            )
+            label.bind(
+                size=lambda instance, value: setattr(instance, "text_size", value)
+            )
 
-        top_layout.add_widget(self.correct_letters_box)
+            # Kontener
+            box.add_widget(label)
+            if widget:
+                if isinstance(widget, GridLayout):
+                    box.add_widget(widget)
+                else:
+                    box.add_widget(widget)
 
-        #Letters input
-        self.letters_layout.bind(minimum_height=self.letters_layout.setter('height'))
-        self.letters_layout.size_hint_y = None
-        self.letters_layout.height = 60
-        top_layout.add_widget(self.letters_layout)
+            top_layout.add_widget(self.create_section_wrapper(box))
 
-        self.incorrect_letters_label = Label(text='Litery na niepoprawnych pozycjach', size_hint_y=None, height=20, halign='left', valign='middle')
-        self.incorrect_letters_box.add_widget(self.incorrect_letters_label)
-
-        top_layout.add_widget(self.incorrect_letters_box)
-
-        #Letters input
-        self.in_letters_layout.bind(minimum_height=self.in_letters_layout.setter('height'))
-        self.in_letters_layout.size_hint_y = None
-        self.in_letters_layout.height = 60
-        top_layout.add_widget(self.in_letters_layout)
+        # Lista wyników
+        results_label = Label(
+            text="Proponowane rozwiązania:",
+            color=COLORS["text"],
+            font_name=FONTS["medium"],
+            font_size=dp(16),
+            size_hint_y=None,
+            height=dp(25),
+            halign="left",
+        )
+        results_label.bind(size=results_label.setter("text_size"))
 
         root_layout.add_widget(top_layout)
-        
-        bottom_layout = BoxLayout(size_hint_y=0.5, padding=[10, 0, 10, 10])
-        bottom_layout.add_widget(self.word_list)
-        
-        root_layout.add_widget(bottom_layout)
+        root_layout.add_widget(results_label)
+        root_layout.add_widget(self.word_list)
+
+        root_layout.bind(size=self._update_bg, pos=self._update_bg)
 
         return root_layout
 
-    
+    def _update_bg(self, instance, value):
+        # Zapobiegaj pozostawaniu artefaktów
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(*COLORS["background"])
+            Rectangle(pos=instance.pos, size=instance.size)
+
+    def create_section_wrapper(self, content):
+        wrapper = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            padding=[dp(5), dp(5)],
+            spacing=dp(5),
+            height=content.height,
+        )
+
+        wrapper.add_widget(content)
+
+        return wrapper
+
+    def update_rect(self, instance, value):
+        self.rect.pos = instance.pos
+        self.rect.size = instance.size
+
 
 if __name__ == "__main__":
     MyApp().run()
