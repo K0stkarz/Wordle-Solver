@@ -1,134 +1,16 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
-from kivy.uix.spinner import Spinner
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.anchorlayout import AnchorLayout
-from kivy.uix.button import Button
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.graphics import Color, Rectangle
 from kivy.metrics import dp
-from kivy.utils import get_color_from_hex
+from ui.styles import COLORS, FONTS
 from ui.customWordInput import CustomWordInput
 from ui.eventHandlers import EventHandlers
-
-# Konfiguracja stylów
-COLORS = {
-    "background": get_color_from_hex("#1B1B1E"),
-    "primary": get_color_from_hex("#25F7BF"),
-    "secondary": get_color_from_hex("#1B1B1E"),
-    "text": get_color_from_hex("#D8DBE2"),
-    "surface": get_color_from_hex("#3A3A40"),
-    "error": get_color_from_hex("#B00020"),
-    "hint": get_color_from_hex("#148C6C"),
-}
-
-FONTS = {
-    "regular": "assets/fonts/Roboto-Regular.ttf",
-    "medium": "assets/fonts/Roboto-Medium.ttf",
-}
-
-
-class StyledButton(Button):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.background_normal = ""
-        self.background_color = (0, 0, 0, 0)
-        self.color = COLORS["secondary"]
-        self.font_name = FONTS["medium"]
-        self.font_size = dp(18)
-        self.bold = False
-        with self.canvas.before:
-            Color(*COLORS["primary"])
-            self.rect = RoundedRectangle(size=self.size, pos=self.pos, radius=[dp(8)])
-        self.bind(pos=self.update_rect, size=self.update_rect)
-
-    def update_rect(self, *args):
-        self.rect.pos = self.pos
-        self.rect.size = self.size
-
-
-class StyledTextInput(TextInput):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.background_normal = ""
-        self.background_disabled_normal = ""
-        self.background_color = COLORS["surface"]  # Nadpisuje styl disabled
-        self.foreground_color = COLORS["primary"]
-        self.hint_text_color = COLORS["primary"]
-        self.font_name = FONTS["regular"]
-        self.font_size = dp(16)
-        self.padding = [dp(8), dp(8)]
-        self.cursor_color = COLORS["secondary"]
-        self.cursor_width = dp(2)
-
-
-from kivy.uix.dropdown import DropDown
-
-
-class StyledSpinner(Spinner):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.background_normal = ""
-        self.background_color = (0, 0, 0, 0)
-        self.color = COLORS["secondary"]
-        self.font_name = FONTS["medium"]
-        self.font_size = dp(18)
-
-        with self.canvas.before:
-            Color(*COLORS["primary"])
-            self.rect = RoundedRectangle(size=self.size, pos=self.pos, radius=[dp(8)])
-
-        self.bind(pos=self.update_rect, size=self.update_rect)
-        self.option_cls = self.create_option()
-        self.dropdown_cls = self.RoundedDropdown
-
-    def update_rect(self, *args):
-        self.rect.pos = self.pos
-        self.rect.size = self.size
-
-    class RoundedDropdown(DropDown):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self.background_color = COLORS["surface"]
-            self.border = [0, 0, 0, 0]
-            self.max_height = dp(200)
-
-            with self.canvas.before:
-                Color(*COLORS["surface"])
-                self.bg_rect = RoundedRectangle(radius=[dp(8)])
-
-            self.bind(pos=self.update_bg, size=self.update_bg)
-
-        def update_bg(self, instance, value):
-            self.bg_rect.pos = instance.pos
-            self.bg_rect.size = instance.size
-
-    def create_option(self):
-        class RoundedOption(Button):
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                self.background_normal = ""
-                self.background_color = COLORS["surface"]
-                self.color = COLORS["text"]
-                self.font_name = FONTS["regular"]
-                self.size_hint_y = None
-                self.height = dp(40)
-
-                with self.canvas.before:
-                    Color(*COLORS["surface"])
-                    self.rect = RoundedRectangle(
-                        pos=self.pos, size=self.size, radius=[dp(4)]
-                    )
-
-                self.bind(pos=self.update_rect, size=self.update_rect)
-
-            def update_rect(self, instance, value):
-                self.rect.pos = self.pos
-                self.rect.size = self.size
-
-        return RoundedOption
+from ui.styledButton import StyledButton
+from ui.styledSpinner import StyledSpinner
+from ui.styledTextInput import StyledTextInput
 
 
 class MyApp(App):
@@ -313,8 +195,6 @@ class MyApp(App):
         root_layout.add_widget(top_layout)
         root_layout.add_widget(results_label)
         root_layout.add_widget(self.word_list)
-
-        root_layout.bind(size=self._update_bg, pos=self._update_bg)
 
         return root_layout
 
