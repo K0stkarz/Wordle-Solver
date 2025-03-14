@@ -19,15 +19,15 @@ class WordFinder:
             self.positions.append(position)
             if position >= self.length:
                 raise ValueError("Position out of range")
-            self.letters[position] = letter
+            self.letters[position] = letter.lower()
         elif not available:
-            self.noAvaliable.append(letter)
+            self.noAvaliable.append(letter.lower())
         else:
-            if letter not in self.lettersNoPos:
-                self.lettersNoPos.append(letter)
-            if letter not in self.notOnPosition:
-                self.notOnPosition[letter] = []
-            self.notOnPosition[letter].append(notOnPosition)
+            if letter.lower() not in self.lettersNoPos:
+                self.lettersNoPos.append(letter.lower())
+            if letter.lower() not in self.notOnPosition:
+                self.notOnPosition[letter.lower()] = []
+            self.notOnPosition[letter.lower()].append(notOnPosition)
 
     def undo(self, letter=None, position=None, available=True, notOnPosition=None):
         if position is not None:
