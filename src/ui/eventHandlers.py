@@ -1,13 +1,14 @@
+import threading
+from kivy.clock import mainthread, Clock
+from kivy.metrics import Metrics
 from . import (
-    BoxLayout,
     WordFinder,
     LimitedTextInput,
     Label,
     LimitedTextInputNotOnPosition,
     dp,
-    get_color_from_hex,
+    BoxLayout
 )
-
 
 class EventHandlers:
     def __init__(
@@ -23,6 +24,8 @@ class EventHandlers:
         correct_letters_box,
         incorrect_letters_box,
         COLORS,
+        store,
+        app,
     ):
         self.COLORS = COLORS
         self.WordSolver = word_solver
@@ -36,52 +39,94 @@ class EventHandlers:
         self.word1_box = word1_box
         self.correct_letters_box = correct_letters_box
         self.incorrect_letters_box = incorrect_letters_box
+        self.store = store
+        self.app = app
+        
+        # Flaga blokująca szukanie podczas przywracania stanu
+        self.is_restoring = False
+        # Timer do debouncingu (opóźnienia szukania)
+        self.search_event = None
+
+    def trigger_search(self):
+        """Uruchamia szukanie z opóźnieniem (żeby nie mulić przy szybkim pisaniu)"""
+        if self.search_event:
+            self.search_event.cancel()
+        # Czekaj 0.1s po ostatnim wciśnięciu klawisza zanim zaczniesz liczyć
+        self.search_event = Clock.schedule_once(lambda dt: self._start_thread(), 0.1)
+
+    def _start_thread(self):
+        threading.Thread(target=self._run_search_background, daemon=True).start()
+
+    def _run_search_background(self):
+        if self.WordSolver:
+            try:
+                results = self.WordSolver.search()
+                self._update_ui_results(results)
+            except Exception as e:
+                print(f"Błąd szukania: {e}")
+
+    @mainthread
+    def _update_ui_results(self, results):
+        if not results:
+            self.word_list.text = ""
+            self.word_list.hint_text = "Brak wyników"
+        else:
+            self.word_list.text = "\n".join(results)
+            self.word_list.hint_text = "Znalezione słowa..."
 
     def on_spinner_select(self, spinner, text):
-        # Resetuj wszystkie pola
         self.clear_all_inputs(None)
-
-        # Aktualizuj widoczność
-        for box in [
-            self.word1_box,
-            self.correct_letters_box,
-            self.incorrect_letters_box,
-        ]:
+        
+        for box in [self.word1_box, self.correct_letters_box, self.incorrect_letters_box]:
             box.opacity = 1
             box.disabled = False
 
-        # Pozostała logika
         self.selected_number = int(text)
+        
+        # Zapisz wybór w App
+        if self.app:
+            self.app.current_word_length = self.selected_number
+            
         self.WordSolver = WordFinder(self.selected_number, self.words)
         self._create_input_fields()
-
-        # Wymuś aktualizację layoutu
+        
+        # Wymuś odświeżenie widoku
         self.letters_layout.do_layout()
         self.in_letters_layout.do_layout()
 
+    def on_scale_select(self, spinner, text):
+        try:
+            raw_value = text.replace("Skala: ", "")
+            new_density = float(raw_value)
+            
+            if abs(new_density - Metrics.density) < 0.01:
+                return
+
+            if self.store:
+                self.store.put('display', density=new_density)
+            
+            self.app.reload_interface(new_density)
+            
+        except ValueError:
+            pass
+
     def _create_input_fields(self):
-        # Czyszczenie layoutów
         self.letters_layout.clear_widgets()
         self.in_letters_layout.clear_widgets()
         self.letter_inputs = []
 
-        # Konfiguracja layoutów
         for layout in [self.letters_layout, self.in_letters_layout]:
             layout.cols = self.selected_number
             layout.size_hint_y = None
-            layout.height = dp(45)  # Używaj dp dla spójności
+            layout.height = dp(45)
 
-        # Tworzenie pól wejściowych
         self._add_fields_to_layout(self.letters_layout, LimitedTextInput)
-        self._add_fields_to_layout(
-            self.in_letters_layout, LimitedTextInputNotOnPosition
-        )
+        self._add_fields_to_layout(self.in_letters_layout, LimitedTextInputNotOnPosition)
 
     def _add_fields_to_layout(self, layout, input_class):
         for i in range(1, self.selected_number + 1):
             box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(60))
 
-            # Tworzenie pola z odpowiednią klasą
             if input_class == LimitedTextInputNotOnPosition:
                 input_field = input_class(
                     app_instance=self,
@@ -138,113 +183,41 @@ class EventHandlers:
                 letter_input.text = ""
 
     def on_letter_input(self, text_input):
-        # Funkcja
         letter = text_input.text
         position = text_input.index
-
-        # Wywołanie metody WordSolver.input z literą i pozycją
         self.WordSolver.input(letter, position)
-
-        # Aktualizacja pola wyświetlania słów
-        searchedWords = self.WordSolver.search()
-        self.word_list.text = "\n".join(searchedWords)
+        if not self.is_restoring:
+            self.trigger_search()
 
     def on_letter_delete(self, text_input):
-        # Funkcja wywoływana po skasowaniu litery
-
-        self.word_list.text = ""
-
         position = text_input.index
-
-        # Wywołanie metody WordSolver.undo z pozycją
         if text_input.text == "":
             self.WordSolver.undo(position=position)
-
-        # Aktualizacja pola wyświetlania słów
-        if (
-            self.WordSolver.positions == []
-            and self.WordSolver.letters == [None for _ in range(self.selected_number)]
-            and self.WordSolver.noAvaliable == []
-            and self.WordSolver.lettersNoPos == []
-            and self.WordSolver.notOnPosition == {}
-        ):
-            self.word_list.text = ""
-        else:
-            searchedWords = self.WordSolver.search()
-            self.word_list.text = "\n".join(searchedWords)
+        if not self.is_restoring:
+            self.trigger_search()
 
     def on_letter_input_not_on_pos(self, text_input, to_add):
-        # Funkcja wywoływana po wpisaniu litery
-        self.word_list.text = ""
         position = text_input.index
-
-        # Wywołanie metody WordSolver.input z literą i pozycją
         self.WordSolver.input(to_add, notOnPosition=position - self.selected_number)
-
-        # Aktualizacja pola wyświetlania słów
-        searchedWords = self.WordSolver.search()
-        self.word_list.text = "\n".join(searchedWords)
+        if not self.is_restoring:
+            self.trigger_search()
 
     def on_letter_delete_not_on_pos(self, text_input, to_del):
-        # Funkcja wywoływana po skasowaniu litery
-
-        self.word_list.text = ""
-
-        self.WordSolver.undo(
-            to_del, notOnPosition=text_input.index - self.selected_number
-        )
-
-        # Aktualizacja pola wyświetlania słów
-        if (
-            self.WordSolver.positions == []
-            and self.WordSolver.letters == [None for _ in range(self.selected_number)]
-            and self.WordSolver.noAvaliable == []
-            and self.WordSolver.lettersNoPos == []
-            and self.WordSolver.notOnPosition == {}
-        ):
-            self.word_list.text = ""
-        else:
-            searchedWords = self.WordSolver.search()
-            self.word_list.text = "\n".join(searchedWords)
+        self.WordSolver.undo(to_del, notOnPosition=text_input.index - self.selected_number)
+        if not self.is_restoring:
+            self.trigger_search()
 
     def on_word1_input(self, instance, value):
-        self.word_list.text = ""
-
         for letter in value:
             if letter.isalpha():
                 self.WordSolver.input(letter=letter, available=False)
-
-        if (
-            self.WordSolver.positions == []
-            and self.WordSolver.letters == [None for _ in range(self.selected_number)]
-            and self.WordSolver.noAvaliable == []
-            and self.WordSolver.lettersNoPos == []
-            and self.WordSolver.notOnPosition == {}
-        ):
-            self.word_list.text = ""
-        else:
-            searchedWords = self.WordSolver.search()
-            self.word_list.text = "\n".join(searchedWords)
+        if not self.is_restoring:
+            self.trigger_search()
 
     def on_word1_delete(self, instance):
-        # Here you can add the logic to handle word1 deletion
-        self.word_list.text = ""
-        self.WordSolver.noAvaliable = []  # Reset the noAvailable letters
-
-        # Re-add all letters that are still in the input
+        self.WordSolver.noAvaliable = []
         for letter in instance.text:
             if letter.isalpha():
                 self.WordSolver.input(letter=letter, available=False)
-
-        # Update the word list
-        if (
-            self.WordSolver.positions == []
-            and self.WordSolver.letters == [None for _ in range(self.selected_number)]
-            and self.WordSolver.noAvaliable == []
-            and self.WordSolver.lettersNoPos == []
-            and self.WordSolver.notOnPosition == {}
-        ):
-            self.word_list.text = ""
-        else:
-            searchedWords = self.WordSolver.search()
-            self.word_list.text = "\n".join(searchedWords)
+        if not self.is_restoring:
+            self.trigger_search()
